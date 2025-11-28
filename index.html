@@ -239,10 +239,37 @@
   let entries = {}; // { 'YYYY-MM-DD': { text: "...", status: 'win'|'loss' } }
 
   // --- util ---
+  const API_URL = 'http://localhost:3000/api';
   function pad(n){ return n<10? '0'+n : String(n); }
   function keyFor(y,m,d){ return `${y}-${pad(m)}-${pad(d)}`; } // m is 1..12
-  function saveToStorage(){ localStorage.setItem('tradingEntries', JSON.stringify(entries)); }
-  function loadFromStorage(){ const raw = localStorage.getItem('tradingEntries'); if(raw) try{ entries = JSON.parse(raw);}catch(e){ entries = {} } }
+  
+  async function saveToStorage(){ 
+    localStorage.setItem('tradingEntries', JSON.stringify(entries));
+    try {
+      await fetch(`${API_URL}/entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries })
+      });
+    } catch(e) {
+      console.log('Offline: saved locally only');
+    }
+  }
+  
+  async function loadFromStorage(){ 
+    try {
+      const res = await fetch(`${API_URL}/entries`);
+      if(res.ok) {
+        entries = await res.json();
+        localStorage.setItem('tradingEntries', JSON.stringify(entries));
+        return;
+      }
+    } catch(e) {
+      console.log('Offline: loading from local storage');
+    }
+    const raw = localStorage.getItem('tradingEntries'); 
+    if(raw) try{ entries = JSON.parse(raw);}catch(e){ entries = {} } 
+  }
   function updateStats(){
     const total = Object.keys(entries).filter(k=> entries[k].text && entries[k].text.trim().length>0).length;
     const wins = Object.keys(entries).filter(k=> entries[k].status === 'win').length;
@@ -407,10 +434,12 @@
   });
 
   // --- init ---
-  loadFromStorage();
-  generateCalendar();
-  renderEntriesList();
-  updateStats();
+  (async () => {
+    await loadFromStorage();
+    generateCalendar();
+    renderEntriesList();
+    updateStats();
+  })();
 
   // optional: when clicking outside, clear selection outline (but keep selectedKey)
   document.addEventListener('click', (e)=>{
